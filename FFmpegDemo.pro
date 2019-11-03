@@ -26,7 +26,7 @@ FORMS += \
     mainwindow.ui
 
 # ffmpeg
-FFMPEG_PATH = /home/chry/codes/FFmpegDemo/ffmpeg
+FFMPEG_PATH = $$PWD/ffmpeg
 
 INCLUDEPATH += $$FFMPEG_PATH/include
 
