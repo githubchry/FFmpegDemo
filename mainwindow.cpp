@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
+#include <QDebug>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -7,6 +8,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
+    int ret = -1;
     char *file_path = "../chrome.mp4";
 
     //初始化FFMPEG  调用了这个才能正常适用编码器和解码器
@@ -16,7 +18,13 @@ MainWindow::MainWindow(QWidget *parent)
     pFormatCtx = avformat_alloc_context();
 
     //打开视频文件
-    avformat_open_input(&pFormatCtx, file_path, NULL, NULL);
+    ret = avformat_open_input(&pFormatCtx, file_path, NULL, NULL);
+    if(0 != ret)
+    {
+        char tmp[256];
+        av_strerror(ret, tmp, 256);
+        qDebug("avformat_open_input %s failed %d: %s\n", file_path, ret,tmp);
+    }
     av_dump_format(pFormatCtx, 0, file_path, 0); //打印视频信息
 
     //文件打开成功后循环查找文件中包含的流信息，直到找到视频类型的流,将其记录下来 保存到videoStream变量中
