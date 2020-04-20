@@ -3,6 +3,9 @@
 
 #include <QMainWindow>
 
+#include <thread>
+#include <atomic>
+
 extern "C"
 {
     #include <libavcodec/avcodec.h>
@@ -22,6 +25,9 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
+private:
+    int VideoInit(const char *url);
+    void VideoDeinit();
 private slots:
     void on_pbNextFrame_clicked();
 
@@ -30,6 +36,8 @@ private slots:
     void on_rbUrl_clicked();
 
     void on_pbInitFFmpeg_clicked();
+
+    void on_pbPlay_clicked();
 
 private:
     Ui::MainWindow *ui;
@@ -43,5 +51,8 @@ private:
     AVFrame *pFrameRGB24 = nullptr;
     SwsContext *img_convert_ctx = nullptr;
     uint8_t *pRGB24Buffer = nullptr;
+
+    std::shared_ptr<std::thread> playThread = nullptr;
+    std::atomic<bool> runFlag{false};
 };
 #endif // MAINWINDOW_H
