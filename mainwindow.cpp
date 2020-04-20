@@ -32,70 +32,12 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
-void MainWindow::on_pbNextFrame_clicked()
-{
-    if(nullptr == packet) return;
-
-    do{
-        if (av_read_frame(pFormatCtx, packet) < 0)  //读取的是一帧视频，并存入一个AVPacket的结构中
-        {
-            qDebug("file end.\n");
-            return; //这里认为视频读取完了
-        }
-    }while(packet->stream_index != videoStreamIdx);
-
-    // 时间戳 https://www.cnblogs.com/gr-nick/p/10993363.html
-    // FFmpeg:AVStream结构体分析 https://blog.csdn.net/qq_25333681/article/details/80486212
-    // 深入理解pts，dts，time_base https://blog.csdn.net/bixinwei22/article/details/78770090
-    qDebug("packet dts[%lld].",packet->dts);
-    qDebug("packet pts[%lld].\n",packet->pts);
-    AVStream * avStream = pFormatCtx->streams[0];
-    qDebug("time_base[%d/%d].\n", avStream->time_base.num, avStream->time_base.den);
-    //根据pts来计算一桢在整个视频中的时间位置：timestamp(秒) = packet->pts * av_q2d(avStream->time_base)
-    qDebug("show time [%f].\n", packet->pts * av_q2d(avStream->time_base));
-    qDebug("len [%f].\n", packet->duration * av_q2d(avStream->time_base));
-    ;
-
-
-
-    int got_picture = 0;
-    int ret = avcodec_decode_video2(pCodecCtx, pFrameYUV420, &got_picture, packet);
-
-    if (ret < 0)
-    {
-        qDebug("decode error.\n");
-        return;
-    }
-
-    if (got_picture)
-    {
-        sws_scale(img_convert_ctx,
-                  (uint8_t const * const *)pFrameYUV420->data, pFrameYUV420->linesize,
-                  0, pCodecCtx->height,
-                  pFrameRGB24->data, pFrameRGB24->linesize);
-        //把这个RGB数据 用QImage加载
-        QImage tmpImg(pRGB24Buffer, pCodecCtx->width, pCodecCtx->height, QImage::Format_RGB888);
-        ui->lbImage->setPixmap(QPixmap::fromImage(tmpImg));
-    }
-}
-
-void MainWindow::on_rbFile_clicked()
-{
-    QString fileName = QFileDialog::getOpenFileName(this, "选择文件");
-    ui->edInput->setText(fileName);
-}
-
-void MainWindow::on_rbUrl_clicked()
-{
-    //ui->edInput->setText("rtsp://192.168.2.129:8554/slamtv60.264");
-    ui->edInput->setText("rtsp://192.168.2.129:8554/fsly");
-
-}
-
 void MainWindow::on_pbInitFFmpeg_clicked()
 {
     //打开file or url
-    int ret = avformat_open_input(&pFormatCtx, ui->edInput->text().toStdString().c_str(), NULL, NULL);
+    AVDictionary *options = NULL;
+    av_dict_set(&options, "stimeout", "500000", 0); //设置超时时间为500ms   rtmp 使用timeout 配置参数会报错(ffmpeg bug)
+    int ret = avformat_open_input(&pFormatCtx, ui->edInput->text().toStdString().c_str(), NULL, &options);
     if (0 != ret)
     {
         char tmp[256];
@@ -188,6 +130,66 @@ void MainWindow::on_pbInitFFmpeg_clicked()
     img_convert_ctx = sws_getContext(avcodecParameters->width, avcodecParameters->height, srcVideoFormat,
                                      avcodecParameters->width, avcodecParameters->height, AV_PIX_FMT_RGB24,
                                      SWS_BICUBIC, NULL, NULL, NULL);
+}
+
+void MainWindow::on_pbNextFrame_clicked()
+{
+    if(nullptr == packet) return;
+
+    do{
+        if (av_read_frame(pFormatCtx, packet) < 0)  //读取的是一帧视频，并存入一个AVPacket的结构中
+        {
+            qDebug("file end.\n");
+            return; //这里认为视频读取完了
+        }
+    }while(packet->stream_index != videoStreamIdx);
+
+    // 时间戳 https://www.cnblogs.com/gr-nick/p/10993363.html
+    // FFmpeg:AVStream结构体分析 https://blog.csdn.net/qq_25333681/article/details/80486212
+    // 深入理解pts，dts，time_base https://blog.csdn.net/bixinwei22/article/details/78770090
+    qDebug("packet dts[%lld].",packet->dts);
+    qDebug("packet pts[%lld].\n",packet->pts);
+    AVStream * avStream = pFormatCtx->streams[0];
+    qDebug("time_base[%d/%d].\n", avStream->time_base.num, avStream->time_base.den);
+    //根据pts来计算一桢在整个视频中的时间位置：timestamp(秒) = packet->pts * av_q2d(avStream->time_base)
+    qDebug("show time [%f].\n", packet->pts * av_q2d(avStream->time_base));
+    qDebug("len [%f].\n", packet->duration * av_q2d(avStream->time_base));
+    ;
+
+
+
+    int got_picture = 0;
+    int ret = avcodec_decode_video2(pCodecCtx, pFrameYUV420, &got_picture, packet);
+
+    if (ret < 0)
+    {
+        qDebug("decode error.\n");
+        return;
+    }
+
+    if (got_picture)
+    {
+        sws_scale(img_convert_ctx,
+                  (uint8_t const * const *)pFrameYUV420->data, pFrameYUV420->linesize,
+                  0, pCodecCtx->height,
+                  pFrameRGB24->data, pFrameRGB24->linesize);
+        //把这个RGB数据 用QImage加载
+        QImage tmpImg(pRGB24Buffer, pCodecCtx->width, pCodecCtx->height, QImage::Format_RGB888);
+        ui->lbImage->setPixmap(QPixmap::fromImage(tmpImg));
+    }
+}
+
+void MainWindow::on_rbFile_clicked()
+{
+    QString fileName = QFileDialog::getOpenFileName(this, "选择文件");
+    ui->edInput->setText(fileName);
+}
+
+void MainWindow::on_rbUrl_clicked()
+{
+    //ui->edInput->setText("rtsp://192.168.2.129:8554/slamtv60.264");
+    ui->edInput->setText("rtsp://192.168.2.129:8554/fsly");
+
 }
 
 
