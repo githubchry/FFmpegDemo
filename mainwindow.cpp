@@ -3,6 +3,13 @@
 #include <QDebug>
 #include <QFileDialog>
 
+// 回调函数
+typedef struct {
+    time_t lasttime;
+} qrcb_arg;
+
+static qrcb_arg cb_arg = { 0 };
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
@@ -17,6 +24,19 @@ MainWindow::MainWindow(QWidget *parent)
 
     //分配一个AVFormatContext，FFMPEG所有的操作都要通过这个AVFormatContext来进行
     pFormatCtx = avformat_alloc_context();
+
+    pFormatCtx->interrupt_callback.opaque = &cb_arg;
+    pFormatCtx->interrupt_callback.callback = [](void *cb_arg)->int{
+        qrcb_arg *arg = (qrcb_arg *)cb_arg;
+        if (arg->lasttime > 0) {
+            if (time(NULL) - arg->lasttime > 1) {
+                // 等待超过1s则中断
+                qDebug("timeout.");
+                return 1;   //只要返回非0值，就会退出阻塞
+            }
+        }
+        return 0;
+    };
 }
 
 MainWindow::~MainWindow()
@@ -35,15 +55,16 @@ MainWindow::~MainWindow()
 void MainWindow::on_pbInitFFmpeg_clicked()
 {
     //打开file or url
-    AVDictionary *options = NULL;
-    av_dict_set(&options, "stimeout", "500000", 0); //设置超时时间为500ms   rtmp 使用timeout 配置参数会报错(ffmpeg bug)
-    int ret = avformat_open_input(&pFormatCtx, ui->edInput->text().toStdString().c_str(), NULL, &options);
+
+    cb_arg.lasttime = time(NULL);
+    int ret = avformat_open_input(&pFormatCtx, ui->edInput->text().toStdString().c_str(), NULL, NULL);
     if (0 != ret)
     {
         char tmp[256];
         av_strerror(ret, tmp, 256);
         qDebug("avformat_open_input %s failed %d: %s\n", ui->edInput->text().toStdString().c_str(), ret,tmp);
     }
+    cb_arg.lasttime = 0;
 
     //先从rtsp流中读取一部分包，以获得流媒体的格式，否则下面可能会出现获取视频宽度高度为0的情况
     ret = avformat_find_stream_info(pFormatCtx, NULL);
