@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>600</width>
-    <height>480</height>
+    <width>800</width>
+    <height>600</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -17,8 +17,8 @@
    <widget class="QLabel" name="lbImage">
     <property name="geometry">
      <rect>
-      <x>60</x>
-      <y>30</y>
+      <x>20</x>
+      <y>150</y>
       <width>480</width>
       <height>360</height>
      </rect>
@@ -27,18 +27,79 @@
      <string/>
     </property>
    </widget>
-   <widget class="QPushButton" name="pbNextFrame">
+   <widget class="QWidget" name="layoutWidget">
     <property name="geometry">
      <rect>
-      <x>30</x>
-      <y>410</y>
-      <width>80</width>
-      <height>25</height>
+      <x>10</x>
+      <y>10</y>
+      <width>411</width>
+      <height>101</height>
      </rect>
     </property>
-    <property name="text">
-     <string>下一帧</string>
+    <layout class="QVBoxLayout" name="verticalLayout_2">
+     <item>
+      <widget class="QGroupBox" name="groupBox">
+       <property name="title">
+        <string>输入</string>
+       </property>
+       <widget class="QWidget" name="layoutWidget">
+        <property name="geometry">
+         <rect>
+          <x>10</x>
+          <y>20</y>
+          <width>59</width>
+          <height>46</height>
+         </rect>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout">
+         <item>
+          <widget class="QRadioButton" name="rbFile">
+           <property name="text">
+            <string>文件</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QRadioButton" name="rbUrl">
+           <property name="text">
+            <string>url</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="edInput"/>
+     </item>
+    </layout>
+   </widget>
+   <widget class="QWidget" name="">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>120</y>
+      <width>194</width>
+      <height>30</height>
+     </rect>
     </property>
+    <layout class="QFormLayout" name="formLayout">
+     <item row="0" column="0">
+      <widget class="QPushButton" name="pbInitFFmpeg">
+       <property name="text">
+        <string>初始化</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <widget class="QPushButton" name="pbNextFrame">
+       <property name="text">
+        <string>下一帧</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
    </widget>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
