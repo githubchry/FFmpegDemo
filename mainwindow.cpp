@@ -54,6 +54,9 @@ int MainWindow::video_init(const char *url)
     AVCodec * codec = NULL;
     enum AVPixelFormat srcVideoFormat = AV_PIX_FMT_NONE;
 
+    AVDictionary *options = NULL;
+    //av_dict_set(&options, "rtsp_transport", "tcp", 0);
+
     //分配一个AVFormatContext，FFMPEG所有的操作都要通过这个AVFormatContext来进行
     pFormatCtx = avformat_alloc_context();
     if (NULL == pFormatCtx)
@@ -75,9 +78,10 @@ int MainWindow::video_init(const char *url)
         return 0;
     };
 
+
     //打开file or url
     cb_arg.lasttime = time(NULL);
-    ret = avformat_open_input(&pFormatCtx, url, NULL, NULL);
+    ret = avformat_open_input(&pFormatCtx, url, NULL, &options);
     if (0 != ret)
     {
         char tmp[256];
@@ -286,7 +290,6 @@ int MainWindow::video_frame_play()
 {
 
     int ret = -1;
-    int duration = -1;
 
     ret = video_init(ui->edInput->text().toStdString().c_str());
     if(0 != ret) return ret;
@@ -306,27 +309,41 @@ int MainWindow::video_frame_play()
         /// 5.根据pRGB24Buffer创建QImage并显示
         video_frame_show(pRGB24Buffer, pVDecCtx->width, pVDecCtx->height);
 
-        duration = (packet.duration * av_q2d(pFormatCtx->streams[videoStreamIdx]->time_base) + 0.0005) * 1000;
+        ret = (packet.duration * av_q2d(pFormatCtx->streams[videoStreamIdx]->time_base) + 0.0005) * 1000;
     }
+    //qDebug("video_frame_decode:%d, duration [%f].",ret, ret);
 
 
 
     // 时间戳 https://www.cnblogs.com/gr-nick/p/10993363.html
     // FFmpeg:AVStream结构体分析 https://blog.csdn.net/qq_25333681/article/details/80486212
     // 深入理解pts，dts，time_base https://blog.csdn.net/bixinwei22/article/details/78770090
-    qDebug("packet dts[%ld].",packet.dts);
-    qDebug("packet pts[%ld].",packet.pts);
-    //qDebug("packet rts[%lld].\n",packet->rts);
-    AVStream * avStream = pFormatCtx->streams[videoStreamIdx];
-    qDebug("time_base[%d/%d].", avStream->time_base.num, avStream->time_base.den);
+    //AVStream * avStream = pFormatCtx->streams[videoStreamIdx];
+
+    //qDebug("packet dts[%ld], pts[%ld], rts[%lld].",packet.dts, packet.pts, packet.rts);
     //根据pts来计算一桢在整个视频中的时间位置：timestamp(秒) = packet->pts * av_q2d(avStream->time_base)
-    qDebug("show time [%f].", packet.pts * av_q2d(avStream->time_base));
-    qDebug("len [%f].", packet.duration * av_q2d(avStream->time_base));
+    //qDebug("show time [%f], duration [%d]", packet.pts * av_q2d(avStream->time_base), ret);
 
 
     av_packet_unref(&packet);//不为视频时释放pkt
 
-    return duration;
+    return ret;
+}
+
+void MainWindow::on_playEnded()
+{
+    if (runFlag || playThread)
+    {
+        runFlag = false;
+        if(playThread->joinable())
+        {
+            playThread->join();
+            playThread = nullptr;
+        }
+    }
+    video_deinit();
+
+    ui->pbPalyOrPause->setText("播放");
 }
 
 void MainWindow::on_pbStop_clicked()
@@ -346,7 +363,11 @@ void MainWindow::on_rbUrl_clicked()
     //ui->edInput->setText("rtsp://192.168.2.129:8554/slamtv60.264");
     //ui->edInput->setText("rtsp://192.168.2.129:8554/fsly");
     //ui->edInput->setText("rtsp://10.11.2.75/slamtv60.264");
-    ui->edInput->setText("rtsp://10.11.2.10:8554/fsly");
+    //ui->edInput->setText("rtsp://10.11.2.8:8554/fsly");
+    ui->edInput->setText("rtsp://10.6.1.59/slamtv60.264");
+
+
+    //FFmpeg丢包花屏处理 https://www.jianshu.com/p/f3d2569d0d82
 
 }
 
@@ -382,12 +403,22 @@ void MainWindow::on_pbPalyOrPause_clicked()
             while (runFlag)
             {
                 lasttime = QDateTime::currentMSecsSinceEpoch();
-                ret = video_frame_play();
+                do
+                {
+                    ret = video_frame_play();
+                } while(ret == AVERROR(EAGAIN));
+
+
                 if (ret >= 0)
                 {
                     duration = ret - (QDateTime::currentMSecsSinceEpoch() - lasttime);
-                    duration = duration > 0 ? duration : 1;
+                    duration = duration > 0 ? duration : 0;
                     std::this_thread::sleep_for(std::chrono::milliseconds(duration));
+                }
+                else if (ret == AVERROR(EAGAIN))
+                {
+                    qDebug("AVERROR(EAGAIN) %d.\n", ret);
+                    continue;
                 }
                 else
                 {
@@ -420,18 +451,3 @@ void MainWindow::on_pbPalyOrPause_clicked()
     return;
 }
 
-void MainWindow::on_playEnded()
-{
-    if (runFlag || playThread)
-    {
-        runFlag = false;
-        if(playThread->joinable())
-        {
-            playThread->join();
-            playThread = nullptr;
-        }
-    }
-    video_deinit();
-
-    ui->pbPalyOrPause->setText("播放");
-}
