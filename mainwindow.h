@@ -51,6 +51,7 @@ private:
     AVFrame *pFrameRGB24 = nullptr;
     SwsContext *img_convert_ctx = nullptr;
     uint8_t *pRGB24Buffer = nullptr;
+    bool isVideoInit = false;
 
     std::shared_ptr<std::thread> playThread = nullptr;
     std::atomic<bool> runFlag{false};

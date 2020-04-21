@@ -19,9 +19,6 @@ MainWindow::MainWindow(QWidget *parent)
     ui->rbFile->setChecked(true);
     ui->edInput->setText("../chrome.mp4");
 
-    //初始化FFMPEG  调用了这个才能正常使用编码器和解码器
-    av_register_all();
-
     //分配一个AVFormatContext，FFMPEG所有的操作都要通过这个AVFormatContext来进行
     pFormatCtx = avformat_alloc_context();
 
@@ -42,11 +39,22 @@ MainWindow::MainWindow(QWidget *parent)
 MainWindow::~MainWindow()
 {
     VideoDeinit();
+    avformat_free_context(pFormatCtx);
+
+    if(playThread->joinable())
+    {
+        playThread->join();
+        playThread = nullptr;
+    }
+
+
     delete ui;
 }
 
 int MainWindow::VideoInit(const char *url)
 {
+    if (true == isVideoInit) return 0;
+
     int ret = -1;
     AVCodecParameters * avcodecParameters = NULL;
     AVCodec * codec = NULL;
@@ -180,7 +188,7 @@ int MainWindow::VideoInit(const char *url)
         goto err8;
     }
 
-
+    isVideoInit = true;
     return 0;
 
     //err9:
@@ -188,9 +196,9 @@ int MainWindow::VideoInit(const char *url)
     err8:
         av_free(pRGB24Buffer);
     err7:
-        av_free(pFrameRGB24);
+        av_frame_free(&pFrameRGB24);
     err6:
-        av_free(pFrameYUV420);
+        av_frame_free(&pFrameYUV420);
     err5:
         av_free_packet(packet);
     err4:
@@ -216,6 +224,7 @@ void MainWindow::VideoDeinit()
     avcodec_close(pCodecCtx);
     avcodec_free_context(&pCodecCtx);
     avformat_close_input(&pFormatCtx);
+    isVideoInit = false;
 }
 
 void MainWindow::on_pbInitFFmpeg_clicked()
@@ -225,14 +234,22 @@ void MainWindow::on_pbInitFFmpeg_clicked()
 
 void MainWindow::on_pbNextFrame_clicked()
 {
-    if(nullptr == packet) return;
+    if(0 != VideoInit(ui->edInput->text().toStdString().c_str())) return;
 
     do{
+        //使用FFmpeg要注意内存泄漏的问题，av_read_frame中会申请内存，需要在外面进行释放，所以每读完一个packet，需要调用av_packet_unref进行内存释放。
         if (av_read_frame(pFormatCtx, packet) < 0)  //读取的是一帧视频，并存入一个AVPacket的结构中
         {
             qDebug("file end.\n");
             return; //这里认为视频读取完了
         }
+
+        if (packet->stream_index != videoStreamIdx)
+        {
+            av_packet_unref(packet);//不为视频时释放pkt
+            continue;
+        }
+
     }while(packet->stream_index != videoStreamIdx);
 
     // 时间戳 https://www.cnblogs.com/gr-nick/p/10993363.html
@@ -253,12 +270,14 @@ void MainWindow::on_pbNextFrame_clicked()
     int got_picture = 0;
     int ret = avcodec_decode_video2(pCodecCtx, pFrameYUV420, &got_picture, packet);
 
+    qDebug("%d", __LINE__);
     if (ret < 0)
     {
         qDebug("decode error.\n");
         return;
     }
 
+    qDebug("%d", __LINE__);
     if (got_picture)
     {
         sws_scale(img_convert_ctx,
@@ -269,6 +288,10 @@ void MainWindow::on_pbNextFrame_clicked()
         QImage tmpImg(pRGB24Buffer, pCodecCtx->width, pCodecCtx->height, QImage::Format_RGB888);
         ui->lbImage->setPixmap(QPixmap::fromImage(tmpImg));
     }
+
+    qDebug("%d", __LINE__);
+    av_packet_unref(packet);//不为视频时释放pkt
+    qDebug("%d", __LINE__);
 }
 
 void MainWindow::on_rbFile_clicked()
@@ -291,22 +314,29 @@ void MainWindow::on_rbUrl_clicked()
 void MainWindow::on_pbPlay_clicked()
 {
 
-    if(nullptr == packet) return;
+    if(0 != VideoInit(ui->edInput->text().toStdString().c_str())) return;
+
+    if(true == runFlag) return;
 
     runFlag = true;
     playThread = std::make_shared<std::thread>([this]() {
 
         while (runFlag)
         {
-            do{
-                if (av_read_frame(pFormatCtx, packet) < 0)  //读取的是一帧视频，并存入一个AVPacket的结构中
-                {
-                    qDebug("file end.\n");
-                    return; //这里认为视频读取完了
-                }
-            }while(packet->stream_index != videoStreamIdx);
+            //使用FFmpeg要注意内存泄漏的问题，av_read_frame中会申请内存，需要在外面进行释放，所以每读完一个packet，需要调用av_packet_unref进行内存释放。
+            if (av_read_frame(pFormatCtx, packet) < 0)  //读取的是一帧视频，并存入一个AVPacket的结构中
+            {
+                qDebug("file end.\n");
+                break; //这里认为视频读取完了
+            }
+            if (packet->stream_index != videoStreamIdx)
+            {
+                av_packet_unref(packet);//不为视频时释放pkt
+                continue;
+            }
 
 
+            std::this_thread::sleep_for(std::chrono::milliseconds(40));
             // 时间戳 https://www.cnblogs.com/gr-nick/p/10993363.html
             // FFmpeg:AVStream结构体分析 https://blog.csdn.net/qq_25333681/article/details/80486212
             // 深入理解pts，dts，time_base https://blog.csdn.net/bixinwei22/article/details/78770090
@@ -324,14 +354,17 @@ void MainWindow::on_pbPlay_clicked()
             int got_picture = 0;
             int ret = avcodec_decode_video2(pCodecCtx, pFrameYUV420, &got_picture, packet);
 
+            qDebug("%d", __LINE__);
             if (ret < 0)
             {
                 qDebug("decode error.\n");
                 return;
             }
 
+            qDebug("%d", __LINE__);
             if (got_picture)
             {
+                qDebug("%d", __LINE__);
                 sws_scale(img_convert_ctx,
                           (uint8_t const * const *)pFrameYUV420->data, pFrameYUV420->linesize,
                           0, pCodecCtx->height,
@@ -340,10 +373,12 @@ void MainWindow::on_pbPlay_clicked()
                 QImage tmpImg(pRGB24Buffer, pCodecCtx->width, pCodecCtx->height, QImage::Format_RGB888);
                 ui->lbImage->setPixmap(QPixmap::fromImage(tmpImg));
             }
-            av_free_packet(packet);
+            qDebug("%d", __LINE__);
+
+            av_packet_unref(packet);
+            qDebug("%d", __LINE__);
         }
+        runFlag = false;
+        qDebug("playThread exit.\n");
     });
-
-
-
 }
