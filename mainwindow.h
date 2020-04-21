@@ -35,17 +35,23 @@ private:
     int video_frame_decode(AVCodecContext *avctx, AVFrame *yuv, const AVPacket *pkt);
     int video_frame_to_rgb24(SwsContext *swsctx, AVFrame *yuv, AVFrame *rgb24);
     int video_frame_show(uint8_t *pRGB24Buffer, int width, int height);
+    int video_frame_play();
 
 private slots:
-    void on_pbNextFrame_clicked();
+    int on_pbNextFrame_clicked();
 
     void on_rbFile_clicked();
 
     void on_rbUrl_clicked();
 
-    void on_pbInitFFmpeg_clicked();
+    void on_pbStop_clicked();
 
     void on_pbPalyOrPause_clicked();
+
+    void on_playEnded();
+
+signals:
+    void playEnded();
 
 private:
     Ui::MainWindow *ui;

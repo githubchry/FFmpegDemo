@@ -2,6 +2,7 @@
 #include "ui_mainwindow.h"
 #include <QDebug>
 #include <QFileDialog>
+#include <QDateTime>
 
 // 回调函数
 typedef struct {
@@ -24,6 +25,9 @@ MainWindow::MainWindow(QWidget *parent)
     palette.setColor(QPalette::Background, QColor(0, 0, 0));
     ui->lbImage->setAutoFillBackground(true);  //一定要这句，否则不行
     ui->lbImage->setPalette(palette);
+
+
+    connect(this, &MainWindow::playEnded, this, &MainWindow::on_playEnded);
 
 }
 
@@ -214,15 +218,18 @@ int MainWindow::video_init(const char *url)
 
 void MainWindow::video_deinit()
 {
-    sws_freeContext(pImgConvertCtx);
-    av_free(pRGB24Buffer);
-    av_free(pFrameRGB24);
-    av_free(pFrameYUV420);
-    avcodec_close(pVDecCtx);
-    avcodec_free_context(&pVDecCtx);
-    avformat_close_input(&pFormatCtx);
-    avformat_free_context(pFormatCtx);
-    isVideoInit = false;
+    if (isVideoInit)
+    {
+        sws_freeContext(pImgConvertCtx);
+        av_free(pRGB24Buffer);
+        av_free(pFrameRGB24);
+        av_free(pFrameYUV420);
+        avcodec_close(pVDecCtx);
+        avcodec_free_context(&pVDecCtx);
+        avformat_close_input(&pFormatCtx);
+        avformat_free_context(pFormatCtx);
+        isVideoInit = false;
+    }
 }
 
 int MainWindow::video_frame_get(AVFormatContext *s, AVPacket *pkt, int idx)
@@ -275,9 +282,56 @@ int MainWindow::video_frame_show(uint8_t *pRGB24Buffer, int width, int height)
     return 0;
 }
 
-void MainWindow::on_pbInitFFmpeg_clicked()
+int MainWindow::video_frame_play()
 {
-    video_init(ui->edInput->text().toStdString().c_str());
+
+    int ret = -1;
+    int duration = -1;
+
+    ret = video_init(ui->edInput->text().toStdString().c_str());
+    if(0 != ret) return ret;
+
+    /// 在QT显示一帧图像:
+    /// 1.从输入流获取一帧h264数据 - AVPacket
+    ret = video_frame_get(pFormatCtx, &packet, videoStreamIdx);
+    if(0 != ret) return ret;
+
+    /// 2.使用ffmpeg解码成YUV420数据 - AVFrame
+    ret = video_frame_decode(pVDecCtx, pFrameYUV420, &packet);
+    if(0 == ret)
+    {
+        /// 3.将YUV420数据转成RGB24 - AVFrame
+        video_frame_to_rgb24(pImgConvertCtx, pFrameYUV420, pFrameRGB24);
+        /// 4.把RGB24 AVFrame里面的数据拿出来放到pRGB24Buffer - uint8_t[]
+        /// 5.根据pRGB24Buffer创建QImage并显示
+        video_frame_show(pRGB24Buffer, pVDecCtx->width, pVDecCtx->height);
+
+        duration = (packet.duration * av_q2d(pFormatCtx->streams[videoStreamIdx]->time_base) + 0.0005) * 1000;
+    }
+
+
+
+    // 时间戳 https://www.cnblogs.com/gr-nick/p/10993363.html
+    // FFmpeg:AVStream结构体分析 https://blog.csdn.net/qq_25333681/article/details/80486212
+    // 深入理解pts，dts，time_base https://blog.csdn.net/bixinwei22/article/details/78770090
+    qDebug("packet dts[%ld].",packet.dts);
+    qDebug("packet pts[%ld].",packet.pts);
+    //qDebug("packet rts[%lld].\n",packet->rts);
+    AVStream * avStream = pFormatCtx->streams[videoStreamIdx];
+    qDebug("time_base[%d/%d].", avStream->time_base.num, avStream->time_base.den);
+    //根据pts来计算一桢在整个视频中的时间位置：timestamp(秒) = packet->pts * av_q2d(avStream->time_base)
+    qDebug("show time [%f].", packet.pts * av_q2d(avStream->time_base));
+    qDebug("len [%f].", packet.duration * av_q2d(avStream->time_base));
+
+
+    av_packet_unref(&packet);//不为视频时释放pkt
+
+    return duration;
+}
+
+void MainWindow::on_pbStop_clicked()
+{
+    on_playEnded();
 }
 
 
@@ -296,38 +350,20 @@ void MainWindow::on_rbUrl_clicked()
 
 }
 
-void MainWindow::on_pbNextFrame_clicked()
+int MainWindow::on_pbNextFrame_clicked()
 {
-    if(0 != video_init(ui->edInput->text().toStdString().c_str())) return;
-    /// 在QT显示一帧图像:
-    /// 1.从文件获取一帧h264数据 - AVPacket
-    if(0 != video_frame_get(pFormatCtx, &packet, videoStreamIdx)) return;
-    /// 2.使用ffmpeg解码成YUV420数据 - AVFrame
-    if(0 == video_frame_decode(pVDecCtx, pFrameYUV420, &packet))
+
+    if (true == runFlag || playThread)
     {
-        /// 3.将YUV420数据转成RGB24 - AVFrame
-        video_frame_to_rgb24(pImgConvertCtx, pFrameYUV420, pFrameRGB24);
-        /// 4.把RGB24 AVFrame里面的数据拿出来放到pRGB24Buffer - uint8_t[]
-        /// 5.根据pRGB24Buffer创建QImage并显示
-        video_frame_show(pRGB24Buffer, pVDecCtx->width, pVDecCtx->height);
+        runFlag = false;
+        if(playThread->joinable())
+        {
+            playThread->join();
+            playThread = nullptr;
+        }
     }
 
-
-
-    // 时间戳 https://www.cnblogs.com/gr-nick/p/10993363.html
-    // FFmpeg:AVStream结构体分析 https://blog.csdn.net/qq_25333681/article/details/80486212
-    // 深入理解pts，dts，time_base https://blog.csdn.net/bixinwei22/article/details/78770090
-    qDebug("packet dts[%ld].",packet.dts);
-    qDebug("packet pts[%ld].",packet.pts);
-    //qDebug("packet rts[%lld].\n",packet->rts);
-    AVStream * avStream = pFormatCtx->streams[0];
-    qDebug("time_base[%d/%d].\n", avStream->time_base.num, avStream->time_base.den);
-    //根据pts来计算一桢在整个视频中的时间位置：timestamp(秒) = packet->pts * av_q2d(avStream->time_base)
-    qDebug("show time [%f].\n", packet.pts * av_q2d(avStream->time_base));
-    qDebug("len [%f].\n", packet.duration * av_q2d(avStream->time_base));
-
-
-    av_packet_unref(&packet);//不为视频时释放pkt
+    return video_frame_play();
 }
 
 void MainWindow::on_pbPalyOrPause_clicked()
@@ -339,12 +375,28 @@ void MainWindow::on_pbPalyOrPause_clicked()
         runFlag = true;
         playThread = std::make_shared<std::thread>([this]() {
 
+            int ret = -1;
+            uint64_t lasttime;
+            int duration;
+
             while (runFlag)
             {
-                on_pbNextFrame_clicked();
+                lasttime = QDateTime::currentMSecsSinceEpoch();
+                ret = video_frame_play();
+                if (ret >= 0)
+                {
+                    duration = ret - (QDateTime::currentMSecsSinceEpoch() - lasttime);
+                    duration = duration > 0 ? duration : 1;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(duration));
+                }
+                else
+                {
+                    qDebug("break playThread.\n");
+                    break;
+                }
             }
-            runFlag = false;
             qDebug("playThread exit.\n");
+            if (runFlag) emit this->playEnded();
         });
 
 
@@ -362,9 +414,24 @@ void MainWindow::on_pbPalyOrPause_clicked()
             qDebug("pause\n");
         }
 
-
         ui->pbPalyOrPause->setText("播放");
     }
 
     return;
+}
+
+void MainWindow::on_playEnded()
+{
+    if (runFlag || playThread)
+    {
+        runFlag = false;
+        if(playThread->joinable())
+        {
+            playThread->join();
+            playThread = nullptr;
+        }
+    }
+    video_deinit();
+
+    ui->pbPalyOrPause->setText("播放");
 }
