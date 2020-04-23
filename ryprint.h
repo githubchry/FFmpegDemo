@@ -34,6 +34,15 @@
 #define TIME_STR        "[%04d-%02d-%02d %02d:%02d:%02d]"
 
 #define filename(x) strrchr(x,'/')?strrchr(x,'/')+1:x
+#if defined(Q_OS_WIN32)
+
+#define ryDbg(str, args...)     do {PRINT(COLOR_STR_GREEN "  %s>: FUNCTION: %s, LINE: %d, " COLOR_STR_NONE " " str, \
+    filename(__FILE__), __FUNCTION__, __LINE__, ## args); } while (0)
+
+#define ryErr(str, args...)     do {PRINT(COLOR_STR_RED " %s:%d, %s> " COLOR_STR_NONE " " str, \
+    __FILE__, __LINE__, __FUNCTION__, ## args); } while (0)
+
+#elif defined(Q_OS_LINUX)
 
 #define ryDbg(str, args...)     do {struct timeval tm_tmp; struct tm *ptm = NULL; gettimeofday(&tm_tmp, NULL); ptm = gmtime(&tm_tmp.tv_sec); \
     PRINT(COLOR_STR_GREEN " " TIME_STR " %s>: FUNCTION: %s, LINE: %d, " COLOR_STR_NONE " " str, \
@@ -43,7 +52,7 @@
     PRINT(COLOR_STR_RED " " TIME_STR " %s:%d, %s> " COLOR_STR_NONE " " str, \
     ptm->tm_year + 1900, ptm->tm_mon + 1, ptm->tm_mday, ptm->tm_hour, ptm->tm_min, ptm->tm_sec, __FILE__, __LINE__, __FUNCTION__, ## args); } while (0)
 
-
+#endif
 #define assert_param(expect) \
 do { \
     if (!(expect)) \

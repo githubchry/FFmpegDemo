@@ -32,7 +32,7 @@
      <rect>
       <x>10</x>
       <y>110</y>
-      <width>259</width>
+      <width>281</width>
       <height>25</height>
      </rect>
     </property>
@@ -81,7 +81,7 @@
      <rect>
       <x>100</x>
       <y>29</y>
-      <width>168</width>
+      <width>194</width>
       <height>70</height>
      </rect>
     </property>
@@ -104,6 +104,32 @@
       <widget class="QPushButton" name="pbPalyOrPause">
        <property name="text">
         <string>播放</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </widget>
+   <widget class="QWidget" name="">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>140</y>
+      <width>160</width>
+      <height>17</height>
+     </rect>
+    </property>
+    <layout class="QHBoxLayout" name="horizontalLayout">
+     <item>
+      <widget class="QLabel" name="label">
+       <property name="text">
+        <string>timestamp:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="lbTimestramp">
+       <property name="text">
+        <string>NULL</string>
        </property>
       </widget>
      </item>

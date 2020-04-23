@@ -76,7 +76,9 @@ void MainWindow::frame_handle_func(AVFrame *yuv, uint64_t rts, uint8_t *rgb)
 {
     if (yuv)
     {
-        //qDebug("frame_handle_func rts %ld %dx%d\n", rts, yuv->width, yuv->height);
+        qDebug("frame_handle_func rts %ld, %d x %d\n", rts, yuv->width, yuv->height);
+        
+        s_this->ui->lbTimestramp->setText(QString::number(rts));
         //把这个RGB数据 用QImage加载
         QImage tmpImg(rgb, yuv->width, yuv->height, QImage::Format_RGB888);
         s_this->ui->lbImage->setPixmap(QPixmap::fromImage(tmpImg));
