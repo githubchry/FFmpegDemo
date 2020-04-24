@@ -2,9 +2,48 @@
 #include "ryprint.h"
 #include "rymacros.h"
 
+#ifdef _WIN32
+    #include <winsock2.h>
+    #include <time.h>
+#else
+    #include <sys/time.h>
+#endif
+
+unsigned long long GetCurrentTimeMsec()
+{
+#ifdef _WIN32
+        struct timeval tv;
+        time_t clock;
+        struct tm tm;
+        SYSTEMTIME wtm;
+
+        GetLocalTime(&wtm);
+        tm.tm_year = wtm.wYear - 1900;
+        tm.tm_mon = wtm.wMonth - 1;
+        tm.tm_mday = wtm.wDay;
+        tm.tm_hour = wtm.wHour;
+        tm.tm_min = wtm.wMinute;
+        tm.tm_sec = wtm.wSecond;
+        tm.tm_isdst = -1;
+        clock = mktime(&tm);
+        tv.tv_sec = clock;
+        tv.tv_usec = wtm.wMilliseconds * 1000;
+        return ((unsigned long long)tv.tv_sec * 1000 + (unsigned long long)tv.tv_usec / 1000);
+#else
+        struct timeval tv;
+        gettimeofday(&tv,NULL);
+        return ((unsigned long long)tv.tv_sec * 1000 + (unsigned long long)tv.tv_usec / 1000);
+#endif
+}
+
 ffmvideo::ffmvideo(const char *in)
 {
     strncpy(url, in, sizeof (url));
+    // 简单判断是不是文件流
+    if(strstr(url, ":"))
+    {
+        input_type = 1;
+    }
 }
 
 ffmvideo::~ffmvideo()
@@ -56,6 +95,9 @@ int ffmvideo::init()
         goto err1;
     }
     cb_arg.lasttime = 0;
+
+    ryErr("avformat_open_input %s %s %s %s\n", pFormatCtx->iformat->name,pFormatCtx->iformat->long_name,pFormatCtx->iformat->mime_type,pFormatCtx->iformat->extensions);
+
 
     //先从流中读取一部分包，以获得流媒体的格式，否则下面可能会出现获取视频宽度高度为0的情况(rtsp流情况下)，因为avformat_open_input函数只能解析出一些基本的码流信息
     ret = avformat_find_stream_info(pFormatCtx, NULL);
@@ -242,6 +284,35 @@ int ffmvideo::read_nalu()
     return 0;
 }
 
+int ffmvideo::frame(ffmvideo::frame_handle_func cb)
+{
+    int ret = -1;
+
+    pause();
+
+    ret = init();
+    assert_param_do(0 == ret, goto err0);
+
+    //即使流结束read不到nalu了，也要建议发送几个NULL过去，这样可以在avcodec_receive_frame把解码器上面的东西榨干！
+    ret = avcodec_send_packet(pVDecCtx, read_nalu() >= 0 ? & packet : NULL);
+    assert_param_do(0 == ret, goto err0);
+
+    ret = avcodec_receive_frame(pVDecCtx, pFrameYUV420);
+    assert_param_do(0 == ret, goto err1);
+
+    ret = sws_scale(pImgConvertCtx,
+                    (uint8_t const * const *)pFrameYUV420->data, pFrameYUV420->linesize,
+                    0, pFrameYUV420->height,
+                    pFrameRGB24->data, pFrameRGB24->linesize);
+    assert_param_do(ret > 0, goto err1);
+
+    cb(pFrameYUV420, packet.rts, pRGB24Buffer, false);
+
+err1:
+    av_packet_unref(&packet);
+err0:
+    return ret;
+}
 
 int ffmvideo::play(frame_handle_func cb)
 {
@@ -251,35 +322,51 @@ int ffmvideo::play(frame_handle_func cb)
 
     playThread = std::make_shared<std::thread>([this, cb]() {
 
-        int ret = -1;
         int seq = 0;
+        bool stop_flag = false;
+        uint64_t lasttime;
+        int duration;
+
         while (runFlag)
         {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            lasttime = GetCurrentTimeMsec();
 
             //即使流结束read不到nalu了，也要建议发送几个NULL过去，这样可以在avcodec_receive_frame把解码器上面的东西榨干！
-            ret = avcodec_send_packet(pVDecCtx, read_nalu() >= 0 ? &packet : NULL);
 
-            //ryDbg("avcodec_send_packet %d seq:%d.", ret, seq++);
-            IF_TRUE_DO(ret, break);
+            if(avcodec_send_packet(pVDecCtx, read_nalu() >= 0 ? & packet : NULL))
+            {
+                stop_flag = true;
+                break;
+            }
+
+            //ryDbg("avcodec_send_packet seq:%d.", seq++);
 
             while (0 == avcodec_receive_frame(pVDecCtx, pFrameYUV420))
             {
-                ret = sws_scale(pImgConvertCtx,
+                sws_scale(pImgConvertCtx,
                               (uint8_t const * const *)pFrameYUV420->data, pFrameYUV420->linesize,
                               0, pFrameYUV420->height,
                               pFrameRGB24->data, pFrameRGB24->linesize);
 
-                cb(pFrameYUV420, packet.rts, pRGB24Buffer);
+                if (input_type <= 0)
+                {
+                    duration = packet.duration * av_q2d(pFormatCtx->streams[videoStreamIdx]->time_base) * 1000;
+                    duration = duration - (GetCurrentTimeMsec() - lasttime);
+                    duration = duration > 0 ? duration : 0;
+                    //ryDbg("duration %d  .", duration);
+                    IF_TRUE_DO(duration > 0, std::this_thread::sleep_for(std::chrono::milliseconds(duration)));
+                }
+                cb(pFrameYUV420, packet.rts, pRGB24Buffer, stop_flag);
             }
 
-            av_packet_unref(&packet);//不为视频时释放pkt
+            av_packet_unref(&packet);
         }
 
-        cb(NULL, 0, NULL);
+        cb(NULL, 0, NULL, stop_flag);
         ryDbg("playThread exit.\n");
     });
 
+    return 0;
 }
 
 void ffmvideo::stop()
@@ -288,6 +375,7 @@ void ffmvideo::stop()
     exit();
     return;
 }
+
 
 int ffmvideo::status()
 {

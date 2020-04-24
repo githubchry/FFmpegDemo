@@ -79,43 +79,10 @@
    <widget class="QWidget" name="layoutWidget">
     <property name="geometry">
      <rect>
-      <x>100</x>
-      <y>29</y>
-      <width>194</width>
-      <height>70</height>
-     </rect>
-    </property>
-    <layout class="QFormLayout" name="formLayout">
-     <item row="0" column="0">
-      <widget class="QPushButton" name="pbStop">
-       <property name="text">
-        <string>停止</string>
-       </property>
-      </widget>
-     </item>
-     <item row="0" column="1">
-      <widget class="QPushButton" name="pbNextFrame">
-       <property name="text">
-        <string>下一帧</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="1">
-      <widget class="QPushButton" name="pbPalyOrPause">
-       <property name="text">
-        <string>播放</string>
-       </property>
-      </widget>
-     </item>
-    </layout>
-   </widget>
-   <widget class="QWidget" name="">
-    <property name="geometry">
-     <rect>
       <x>20</x>
       <y>140</y>
       <width>160</width>
-      <height>17</height>
+      <height>19</height>
      </rect>
     </property>
     <layout class="QHBoxLayout" name="horizontalLayout">
@@ -130,6 +97,39 @@
       <widget class="QLabel" name="lbTimestramp">
        <property name="text">
         <string>NULL</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </widget>
+   <widget class="QWidget" name="">
+    <property name="geometry">
+     <rect>
+      <x>100</x>
+      <y>30</y>
+      <width>168</width>
+      <height>70</height>
+     </rect>
+    </property>
+    <layout class="QFormLayout" name="formLayout">
+     <item row="0" column="0">
+      <widget class="QPushButton" name="pbPalyOrPause">
+       <property name="text">
+        <string>播放</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <widget class="QPushButton" name="pbNextFrame">
+       <property name="text">
+        <string>下一帧</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="0">
+      <widget class="QPushButton" name="pbStop">
+       <property name="text">
+        <string>停止</string>
        </property>
       </widget>
      </item>

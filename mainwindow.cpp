@@ -7,8 +7,6 @@
 
 MainWindow* MainWindow::s_this = nullptr;
 
-static qrcb_arg cb_arg = { 0 };
-
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
@@ -30,6 +28,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+    video = nullptr;
     delete ui;
 }
 
@@ -66,33 +65,36 @@ void MainWindow::on_rbUrl_clicked()
 
 }
 
-int MainWindow::on_pbNextFrame_clicked()
-{
-
-    return 0;
-}
-
-void MainWindow::frame_handle_func(AVFrame *yuv, uint64_t rts, uint8_t *rgb)
+void MainWindow::frame_handle_func(AVFrame *yuv, uint64_t rts, uint8_t *rgb, bool stop_flag)
 {
     if (yuv)
     {
-        qDebug("frame_handle_func rts %ld, %d x %d\n", rts, yuv->width, yuv->height);
-        
+        //qDebug("frame_handle_func rts %lu, %d x %d, stop_flag:%d\n", rts, yuv->width, yuv->height, stop_flag);
+
         s_this->ui->lbTimestramp->setText(QString::number(rts));
         //把这个RGB数据 用QImage加载
         QImage tmpImg(rgb, yuv->width, yuv->height, QImage::Format_RGB888);
         s_this->ui->lbImage->setPixmap(QPixmap::fromImage(tmpImg));
     }
-    else
+    else if (stop_flag)
     {
         emit s_this->playEnded();
     }
 }
 
+int MainWindow::on_pbNextFrame_clicked()
+{
+    if (NULL == video)
+        video = std::make_shared<ffmvideo>(ui->edInput->text().toStdString().c_str());
+
+    video->frame(frame_handle_func);
+    ui->pbPalyOrPause->setText("播放");
+    return 0;
+}
+
 void MainWindow::on_pbPalyOrPause_clicked()
 {
     if (NULL == video)
-
         video = std::make_shared<ffmvideo>(ui->edInput->text().toStdString().c_str());
 
     if (false == video->status())

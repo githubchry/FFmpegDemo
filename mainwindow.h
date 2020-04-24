@@ -21,14 +21,14 @@ public:
     ~MainWindow();
 
 private:
-    static void frame_handle_func(AVFrame *yuv, uint64_t rts, uint8_t *rgb);
+    static void frame_handle_func(AVFrame *yuv, uint64_t rts, uint8_t *rgb, bool stop_flag);
 
 private slots:
-    int on_pbNextFrame_clicked();
-
     void on_rbFile_clicked();
 
     void on_rbUrl_clicked();
+
+    int on_pbNextFrame_clicked();
 
     void on_pbStop_clicked();
 

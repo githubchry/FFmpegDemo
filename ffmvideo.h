@@ -12,12 +12,6 @@ extern "C"
     #include <libavutil/imgutils.h>
 }
 
-// 回调函数
-typedef struct {
-    time_t lasttime;
-} qrcb_arg;
-
-
 
 class ffmvideo
 {
@@ -25,7 +19,11 @@ private:
     int init();
     void exit();
 
-    typedef void (*frame_handle_func)(AVFrame *yuv, uint64_t rts, uint8_t *rgb);
+    typedef struct {
+        time_t lasttime;
+    } qrcb_arg;
+    // 回调函数
+    typedef void (*frame_handle_func)(AVFrame *yuv, uint64_t rts, uint8_t *rgb, bool stop_flag);
 
     int read_nalu();
     /// init -> read_nalu -> decode -> read_frame
@@ -34,6 +32,7 @@ public:
     ffmvideo(const char *url);
     ~ffmvideo();
 
+    int frame(frame_handle_func cb);
     int play(frame_handle_func cb);
     void pause();
     void stop();
@@ -41,8 +40,9 @@ public:
 
 private:
     char url[256];
+    int input_type = -1;     //-1未知 0文件流 1网络流
     int videoStreamIdx = -1;            // 视频流索引
-    bool isVideoInit = false;
+    std::atomic<bool> isVideoInit{false};
 
     AVPacket packet;  // 用于存储压缩的数据 h264
     AVFormatContext *pFormatCtx = nullptr;

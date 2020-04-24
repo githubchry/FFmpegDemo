@@ -33,6 +33,8 @@ mv output ~/codes/FFmpegDemo/ffmpeg
 
 解压`Dev`压缩包，把文件夹命名为`ffmpeg`后放在工程目录
 
+### Windows下编译
+
 [windows下编译FFMPEG](https://blog.csdn.net/listener51/article/details/81605472)
 
 [windows下编译ffmpeg](https://blog.csdn.net/mvp_Dawn/article/details/91352773)
