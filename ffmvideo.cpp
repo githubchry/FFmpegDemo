@@ -224,7 +224,7 @@ int ffmvideo::init()
     err1:
         avformat_free_context(pFormatCtx);
     err0:
-
+        ryErr(".\n");
         return 0 == ret ? -1 : ret;
 }
 
@@ -261,13 +261,14 @@ void ffmvideo::pause()
 
 int ffmvideo::read_nalu()
 {
-
-    assert_param_return(0 == init(), NULL);
-
+    assert_param_return(0 == init(), -1);
+    int ret = -1;
     do{
         // 使用FFmpeg要注意内存泄漏的问题，av_read_frame中会申请内存，需要在外面进行释放
         // 所以每读完一个packet，需要调用av_packet_unref进行内存释放。
-        if (av_read_frame(pFormatCtx, &packet) < 0)  //读取的是一帧视频，并存入一个AVPacket的结构中
+        ret = av_read_frame(pFormatCtx, &packet);
+        // ryDbg("av_read_frame ret[%d] packet[%d] stream_index[%d] => videoStreamIdx[%d]", ret, packet.size, packet.stream_index, videoStreamIdx);
+        if (ret < 0)  //读取的是一帧视频，并存入一个AVPacket的结构中
         {
             ryDbg("file end.\n");
             return -1; //这里认为视频读取完了
@@ -278,8 +279,11 @@ int ffmvideo::read_nalu()
             av_packet_unref(&packet);//不为视频时释放pkt
             continue;
         }
-
-    } while(packet.stream_index != videoStreamIdx);
+        else
+        {
+            break;
+        }
+    } while(1);
 
     return 0;
 }
@@ -305,7 +309,7 @@ int ffmvideo::frame(ffmvideo::frame_handle_func cb)
                     0, pFrameYUV420->height,
                     pFrameRGB24->data, pFrameRGB24->linesize);
     assert_param_do(ret > 0, goto err1);
-
+    
     cb(pFrameYUV420, packet.rts, pRGB24Buffer, false);
 
 err1:
@@ -326,18 +330,38 @@ int ffmvideo::play(frame_handle_func cb)
         bool stop_flag = false;
         uint64_t lasttime;
         int duration;
+        int ret = -1;
 
         while (runFlag)
         {
             lasttime = GetCurrentTimeMsec();
 
             //即使流结束read不到nalu了，也要建议发送几个NULL过去，这样可以在avcodec_receive_frame把解码器上面的东西榨干！
-
-            if(avcodec_send_packet(pVDecCtx, read_nalu() >= 0 ? & packet : NULL))
+            if (read_nalu() >= 0)
             {
-                stop_flag = true;
-                break;
+                ret = avcodec_send_packet(pVDecCtx, &packet);
+                if(0 != ret)
+                {
+                    char tmp[256];
+                    av_strerror(ret, tmp, 256);
+                    ryErr("avcodec_send_packet failed %d: %s\n", ret, tmp);
+
+                    stop_flag = true;
+                    break;
+                }
             }
+            else
+            {
+                ret = avcodec_send_packet(pVDecCtx, NULL);
+
+                if(0 != ret)
+                {
+                    ryErr("file over.\n");
+                    stop_flag = true;
+                    break;
+                }
+            }
+
 
             //ryDbg("avcodec_send_packet seq:%d.", seq++);
 

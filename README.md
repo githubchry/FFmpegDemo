@@ -11,16 +11,37 @@
 ## 安装FFmpeg
 ### Linux下编译
 
+#### 编译x264依赖库(可选)
+
+[下载地址](https://code.videolan.org/videolan/x264)
+
+```
+ sudo apt install nasm
+./configure --enable-shared  --enable-pic --prefix=../new-root 
+make
+make install
+ls -l ../new-root
+```
+
+#### 编译FFmpeg
+
 [Download FFmpeg](http://ffmpeg.org/download.html#releases)
 
 ```
-./configure  --disable-x86asm --prefix=output --enable-pthreads --enable-shared --disable-static
+默认不安装x264:
+./configure --prefix=../new-root --enable-pthreads --enable-shared --disable-static --enable-pic
 
-
+链接x264:
+./configure --prefix=../new-root --enable-pthreads --enable-shared --disable-static  --enable-pic \
+--extra-cflags=-I../new-root/include \
+--extra-ldflags=-L../new-root/lib \
+--enable-gpl --enable-libx264 
+ 
+ 
 make
 make install
-strip output/lib/*
-mv output ~/codes/FFmpegDemo/ffmpeg
+strip ../new-root/lib/*
+mv ../new-root ~/codes/FFmpegDemo/ffmpeg
 ```
 
 ### Windows下直接下载开发包

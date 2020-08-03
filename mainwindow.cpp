@@ -14,7 +14,7 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
 
     ui->rbFile->setChecked(true);
-    ui->edInput->setText("../chrome.mp4");
+    ui->edInput->setText("../1080P.mp4");
 
     ui->lbImage->clear();
     QPalette palette;
