@@ -21,7 +21,7 @@ MainWindow::MainWindow(QWidget *parent)
     palette.setColor(QPalette::Background, QColor(0, 0, 0));
     ui->lbImage->setAutoFillBackground(true);  //一定要这句，否则不行
     ui->lbImage->setPalette(palette);
-
+    ui->lbImage->setAlignment(Qt::AlignCenter); //居中
     s_this = this;
     connect(this, &MainWindow::playEnded, this, &MainWindow::on_playEnded);
 }
@@ -74,7 +74,8 @@ void MainWindow::frame_handle_func(AVFrame *yuv, uint64_t rts, uint8_t *rgb, boo
         s_this->ui->lbTimestramp->setText(QString::number(rts));
         //把这个RGB数据 用QImage加载
         QImage tmpImg(rgb, yuv->width, yuv->height, QImage::Format_RGB888);
-        s_this->ui->lbImage->setPixmap(QPixmap::fromImage(tmpImg));
+        //scaled:缩放显示
+        s_this->ui->lbImage->setPixmap(QPixmap::fromImage(tmpImg).scaled(480, 360, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     }
     else if (stop_flag)
     {

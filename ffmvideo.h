@@ -29,7 +29,7 @@ private:
     /// init -> read_nalu -> decode -> read_frame
 
 public:
-    ffmvideo(const char *url);
+    ffmvideo(const char *url,int outw = 0, int outh = 0);
     ~ffmvideo();
 
     int frame(frame_handle_func cb);
@@ -42,6 +42,8 @@ private:
     char url[256];
     int input_type = -1;     //-1未知 0文件流 1网络流
     int videoStreamIdx = -1;            // 视频流索引
+    int outWidth = 0;
+    int outHeight = 0;
     std::atomic<bool> isVideoInit{false};
 
     AVPacket packet;  // 用于存储压缩的数据 h264

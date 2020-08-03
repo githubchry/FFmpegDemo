@@ -36,8 +36,10 @@ unsigned long long GetCurrentTimeMsec()
 #endif
 }
 
-ffmvideo::ffmvideo(const char *in)
+ffmvideo::ffmvideo(const char *in, int outw, int outh)
 {
+    outWidth = outw;
+    outHeight = outh;
     strncpy(url, in, sizeof (url));
     // 简单判断是不是文件流
     if(strstr(url, ":"))
@@ -159,7 +161,10 @@ int ffmvideo::init()
     /// av_read_frame得到压缩的数据包AVPacket，一般有三种压缩的数据包(视频、音频和字幕)，然后调用avcodec_decode_video2对AVPacket进行解码得到AVFrame。
     //根据视频的大小创建AVPacket并分配空间
 
-    ryDbg("width %d height %d.\n", pVDecCtx->width, pVDecCtx->height);
+    outWidth = outWidth ? outWidth : pVDecCtx->width;
+    outHeight = outHeight ? outHeight : pVDecCtx->height;
+
+    ryDbg("width %d height %d => [%d, %d]\n", pVDecCtx->width, pVDecCtx->height, outWidth, outHeight);
 
     // 为YUV420和RGB24分配内存
     pFrameYUV420 = av_frame_alloc();
@@ -190,12 +195,12 @@ int ffmvideo::init()
 
     av_image_fill_arrays(pFrameRGB24->data, pFrameRGB24->linesize,
                              pRGB24Buffer, AV_PIX_FMT_RGB24,
-                             pVDecCtx->width, pVDecCtx->height, 1);
+                             outWidth, outHeight, 1);
 
     //创建视频格式转换器 用于把解码出来的数据从YUV转换成RGB格式，这样才能在QT上显示出来
     srcVideoFormat = pVDecCtx->pix_fmt < 0 ? AV_PIX_FMT_YUV420P : pVDecCtx->pix_fmt;
     pImgConvertCtx = sws_getContext(avcodecParameters->width, avcodecParameters->height, srcVideoFormat,
-                                     avcodecParameters->width, avcodecParameters->height, AV_PIX_FMT_RGB24,
+                                     outWidth, outHeight, AV_PIX_FMT_RGB24,
                                      SWS_BICUBIC, NULL, NULL, NULL);
     if(NULL == pImgConvertCtx)
     {
@@ -309,8 +314,8 @@ int ffmvideo::frame(ffmvideo::frame_handle_func cb)
                     0, pFrameYUV420->height,
                     pFrameRGB24->data, pFrameRGB24->linesize);
     assert_param_do(ret > 0, goto err1);
-    
-    cb(pFrameYUV420, packet.rts, pRGB24Buffer, false);
+
+    cb(pFrameRGB24, packet.rts, pRGB24Buffer, false);
 
 err1:
     av_packet_unref(&packet);
